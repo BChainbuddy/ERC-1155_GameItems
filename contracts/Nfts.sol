@@ -16,13 +16,14 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
         uint256 _requestId,
         uint256 _nftId
     );
-    event itemAdded(NFTtype _type, uint256 _nftId, string _name);
+    event itemAdded(ItemType _type, uint256 _nftId, string _name);
     event earnedReward(address indexed _address, uint256 _amount);
 
     // COINS
     uint256 public constant rewardCoins = 0;
 
-    uint256[] public avatarNfts; //1,2,3,...
+    // uint256[] public avatarNfts; //1,2,3,...
+    uint256 public itemCounter = 1;
 
     uint256 public packPrice;
     address private owner;
@@ -36,7 +37,7 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
     uint32 constant s_numWords = 2;
 
     // NFTTYPE for targeting body part
-    enum NFTtype {
+    enum ItemType {
         avatarSkin, //12%
         avatarUpperBody, //22%
         avatarLowerBody, //22%
@@ -45,17 +46,18 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
     }
 
     // DESCRIPTION OF TOKEN IDS
-    struct NftDescription {
+    struct ItemDescription {
         string name;
         // Chance to get it,
         // Limited supply,
+        uint256 itemSupply;
     }
 
     // Mapping nft type to all token ids that are made for the type
-    mapping(NFTtype => uint256[]) public NFTtypes;
+    mapping(ItemType => uint256[]) public ItemTypes;
 
     // Mapping token id to their description
-    mapping(uint256 => NftDescription) public NFTDescriptions;
+    mapping(uint256 => ItemDescription) public ItemDescriptions;
 
     // MAPPING TO STORE AUTHORIZED CONTRACTS(GAMES AND CONTENT)
     mapping(address => bool) public authorizedContracts;
@@ -99,16 +101,12 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
 
     // DOES THE NFT EXIST, string or the nftId
     function doesNFTOptionExist(
-        uint256 nftId,
         string memory nftName
     ) public view returns (bool) {
         bool result = false;
-        for (uint256 i = 0; i < avatarNfts.length; i++) {
-            if (avatarNfts[i] == nftId) {
-                result = true;
-                break;
-            } else if (
-                keccak256(bytes(NFTDescriptions[avatarNfts[i]].name)) ==
+        for (uint256 i = 0; i < itemCounter; i++) {
+            if (
+                keccak256(bytes(ItemDescriptions[i + 1].name)) ==
                 keccak256(bytes(nftName))
             ) {
                 result = true;
@@ -120,19 +118,19 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
 
     // ADD NEW NFT
     function addNewNFTOption(
-        NFTtype _type,
-        uint256 newId,
-        string memory newName
+        ItemType _type,
+        string memory newName,
+        uint256 itemSupply
     ) public onlyOwner {
         require(
-            doesNFTOptionExist(newId, newName) == false,
-            "This nft option already exists"
+            doesNFTOptionExist(newName) == false,
+            "This item already exists"
         );
-        avatarNfts.push(newId);
-        NFTDescriptions[newId] = NftDescription(newName);
-        NFTtypes[_type].push(newId);
+        ItemDescriptions[itemCounter] = ItemDescription(newName, itemSupply);
+        ItemTypes[_type].push(itemCounter);
+        itemCounter++;
 
-        emit itemAdded(_type, newId, newName);
+        emit itemAdded(_type, itemCounter, newName);
     }
 
     // CALL THIS FUNCTION TO BUY PACKS WITH REWARDCOINS
@@ -170,20 +168,32 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
 
         // TO GET NFT TYPE
         uint256 currentChance = 0;
-        NFTtype resulttype;
+        ItemType resulttype;
         uint8[5] memory chances = getChanceArray();
         for (uint256 i = 0; i < chances.length; i++) {
             if (result > currentChance && result < chances[i]) {
-                resulttype = NFTtype(i);
+                resulttype = ItemType(i);
                 break;
             }
             currentChance = chances[i];
         }
 
         // GET NFT ID, uint256 of the nft option
-        uint256 nftId = NFTtypes[resulttype][
-            ((randomWords[1] % (NFTtypes[resulttype].length - 1)) + 1) // -1 and +1 to be between 1 and length
+        uint256 nftId = ItemTypes[resulttype][
+            ((randomWords[1] % (ItemTypes[resulttype].length - 1)) + 1) // -1 and +1 to be between 1 and length
         ];
+
+        // itemSupply/totalSupply
+        // calculate total supply, go through mapping and add
+        uint256 totalItemTypeSupply;
+        for (uint256 i = 0; i < ItemTypes[resulttype].length; i++) {
+            totalItemTypeSupply += ItemDescriptions[ItemTypes[resulttype][i]]
+                .itemSupply; // GET ITEM SUPPLY OF EACH ELEMENT THAT IS NESTED IN CERTAIN ITEM TYPE
+        }
+
+        for (uint256 i = 0; i < ItemTypes[resulttype].length; i++) {
+            
+        }
 
         // MINT THE NFT ID
         super._mint(getRequestAddress[requestId], nftId, 1, "");
