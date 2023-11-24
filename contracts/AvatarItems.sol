@@ -6,23 +6,24 @@ import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 import "@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract Nfts is ERC1155, VRFConsumerBaseV2 {
+contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     // ERRORS
+    error AvatarItems_insufficientBalance();
 
     // EVENTS
     event packBought(address indexed _address, uint256 _requestId);
     event packOpened(
         address indexed _address,
         uint256 _requestId,
-        uint256 _nftId
+        uint256 _itemId
     );
-    event itemAdded(ItemType _type, uint256 _nftId, string _name);
+    event itemAdded(ItemType _type, uint256 _itemId, string _name);
     event earnedReward(address indexed _address, uint256 _amount);
 
     // COINS
     uint256 public constant rewardCoins = 0;
 
-    // uint256[] public avatarNfts; //1,2,3,...
+    // ITEMS
     uint256 public itemCounter = 1;
 
     uint256 public packPrice;
@@ -36,7 +37,7 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
     uint16 constant s_requestConfirmations = 3;
     uint32 constant s_numWords = 2;
 
-    // NFTTYPE for targeting body part
+    // ITEMTYPE for targeting body part
     enum ItemType {
         avatarSkin, //12%
         avatarUpperBody, //22%
@@ -48,19 +49,20 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
     // DESCRIPTION OF TOKEN IDS
     struct ItemDescription {
         string name;
-        // Chance to get it,
-        // Limited supply,
         uint256 itemSupply;
     }
 
-    // Mapping nft type to all token ids that are made for the type
+    // Mapping item type to all token ids that are made for the type
     mapping(ItemType => uint256[]) public ItemTypes;
 
     // Mapping token id to their description
     mapping(uint256 => ItemDescription) public ItemDescriptions;
 
-    // MAPPING TO STORE AUTHORIZED CONTRACTS(GAMES AND CONTENT)
-    mapping(address => bool) public authorizedContracts;
+    // Mapping to store authorized contracts(games and content contracts)
+    mapping(address => bool) public AuthorizedContracts;
+
+    // Mapping to store the discounts for the packs
+    mapping(address => uint256) public Discounts;
 
     // OWNER MODIFIER
     modifier onlyOwner() {
@@ -74,7 +76,7 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
     // CONTRACT AUTHORIZATION MODIFIER TO CHECK IF THE EXTERNAL CONTRACTS CAN CALL OUR FUNCTION
     modifier isAuthorized() {
         require(
-            authorizedContracts[msg.sender] == true,
+            AuthorizedContracts[msg.sender] == true,
             "The address is not part of authorized contracts"
         );
         _;
@@ -99,15 +101,13 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
         packPrice = _packPrice;
     }
 
-    // DOES THE NFT EXIST, string or the nftId
-    function doesNFTOptionExist(
-        string memory nftName
-    ) public view returns (bool) {
+    // DOES THE ITEM EXIST
+    function doesItemExist(string memory itemName) public view returns (bool) {
         bool result = false;
         for (uint256 i = 0; i < itemCounter; i++) {
             if (
                 keccak256(bytes(ItemDescriptions[i + 1].name)) ==
-                keccak256(bytes(nftName))
+                keccak256(bytes(itemName))
             ) {
                 result = true;
                 break;
@@ -116,21 +116,28 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
         return result;
     }
 
-    // ADD NEW NFT
-    function addNewNFTOption(
+    // ADD NEW ITEM
+    function addAvatarItem(
         ItemType _type,
         string memory newName,
         uint256 itemSupply
     ) public onlyOwner {
-        require(
-            doesNFTOptionExist(newName) == false,
-            "This item already exists"
-        );
+        require(doesItemExist(newName) == false, "This item already exists");
+        require(itemSupply = 0, "Item must have item Supply")
         ItemDescriptions[itemCounter] = ItemDescription(newName, itemSupply);
         ItemTypes[_type].push(itemCounter);
         itemCounter++;
 
         emit itemAdded(_type, itemCounter, newName);
+    }
+
+    // ADD SUPPLY OF THE ITEM(y/n)
+    function addItemSupply(
+        uint256 itemId,
+        uint256 additionalSupply
+    ) public onlyOwner {
+        require(itemSupply = 0, "Item must have item Supply")
+        ItemDescriptions[itemId].itemSupply += additionalSupply;
     }
 
     // CALL THIS FUNCTION TO BUY PACKS WITH REWARDCOINS
@@ -140,7 +147,17 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
             waitingForResponse[_address] == false,
             "The address is waiting for response"
         );
-        super._burn(_address, 0, packPrice);
+        if (
+            balanceOf(_address, 0) <
+            (packPrice * (100 - Discounts[_address])) / 100
+        ) {
+            revert AvatarItems_insufficientBalance();
+        }
+        super._burn(
+            _address,
+            0,
+            (packPrice * (100 - Discounts[_address])) / 100 // To calculate discounts
+        );
         uint256 requestId = COORDINATOR.requestRandomWords(
             s_keyHash,
             s_subscriptionId,
@@ -166,7 +183,7 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
         // RANDOM NUMBER FROM 1-100
         uint256 result = ((randomWords[0] % 99) + 1);
 
-        // TO GET NFT TYPE
+        // TO GET ITEM TYPE
         uint256 currentChance = 0;
         ItemType resulttype;
         uint8[5] memory chances = getChanceArray();
@@ -178,31 +195,40 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
             currentChance = chances[i];
         }
 
-        // GET NFT ID, uint256 of the nft option
-        uint256 nftId = ItemTypes[resulttype][
-            ((randomWords[1] % (ItemTypes[resulttype].length - 1)) + 1) // -1 and +1 to be between 1 and length
-        ];
-
-        // itemSupply/totalSupply
-        // calculate total supply, go through mapping and add
-        uint256 totalItemTypeSupply;
+        // GET THE ACTUAL ITEM ID
+        // First the supply of all items of the resulted item type is sumed up.
+        uint256 totalItemTypeSupply = 0;
         for (uint256 i = 0; i < ItemTypes[resulttype].length; i++) {
             totalItemTypeSupply += ItemDescriptions[ItemTypes[resulttype][i]]
                 .itemSupply; // GET ITEM SUPPLY OF EACH ELEMENT THAT IS NESTED IN CERTAIN ITEM TYPE
         }
 
+        // Getting the random words from VRF and dividing it by total item supply
+        uint256 result2 = ((randomWords[0] % totalItemTypeSupply) + 1);
+
+        // We loop through an array of item of a certain item type to get the winning item.
+        // The same as for the item type but the chance array is not provided, because it is all variable based on the token supply
+        uint256 currentItem = 0;
+        uint256 itemReward;
         for (uint256 i = 0; i < ItemTypes[resulttype].length; i++) {
-            
+            if (
+                result2 > currentItem &&
+                result2 < ItemDescriptions[ItemTypes[resulttype][i]].itemSupply
+            ) {
+                itemReward = ItemTypes[resulttype][i];
+                break;
+            }
+            currentItem = ItemDescriptions[ItemTypes[resulttype][i]].itemSupply;
         }
 
-        // MINT THE NFT ID
-        super._mint(getRequestAddress[requestId], nftId, 1, "");
+        // MINT THE ITEM ID
+        super._mint(getRequestAddress[requestId], itemReward, 1, "");
         waitingForResponse[getRequestAddress[requestId]] = false;
 
-        emit packOpened(getRequestAddress[requestId], requestId, nftId);
+        emit packOpened(getRequestAddress[requestId], requestId, itemReward);
     }
 
-    // CHANCE FOR DIFFERENT NFT TYPES
+    // CHANCE FOR DIFFERENT ITEM TYPES
     function getChanceArray() public pure returns (uint8[5] memory) {
         return [12, 34, 56, 78, 100];
     }
@@ -221,18 +247,15 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
     // If we want to give certain players discount we can do mappings of price for each player
     // Could include upkeep(time) if we want to
     function setPackPrice(uint256 newPrice) external onlyOwner {
+        require(newPrice > 0, "Pack price can't be 0")
         packPrice = newPrice;
     }
 
     // AUTHORIZES THE CONTRACT TO CALL OUR FUNCTIONS
     // If needed can add that only a contract can be authorized, no addresses, for transparency reasons
     function authorizeContract(address _address) external onlyOwner {
-        authorizedContracts[_address] = true;
+        AuthorizedContracts[_address] = true;
     }
-
-    // GIVE DISCOUNT TO A CERTAIN PLAYER IF THEY UNLOCK CERTAIN ACHIVEMENTS
-    // mapping of address and discount
-    // function to change the discount of a player
 
     // TOKEN URI
     function uri(
@@ -251,6 +274,13 @@ contract Nfts is ERC1155, VRFConsumerBaseV2 {
     // URI for entire contract
     function contractURI() public pure returns (string memory) {
         return "https://ipfs.io/ipfs/HASH_HERE/collection.json";
+    }
+
+    // VIEW ITEM DESCRIPTION
+    function viewItemDescription(
+        uint256 itemId
+    ) public view returns (ItemDescription memory) {
+        return ItemDescriptions[itemId];
     }
 
     //GET A RANDOM POWER UP
