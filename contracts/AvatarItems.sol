@@ -21,13 +21,13 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     event earnedReward(address indexed _address, uint256 _amount);
 
     // COINS
-    uint256 public constant rewardCoins = 0;
+    uint256 public constant s_rewardCoins = 0;
 
     // ITEMS
-    uint256 public itemCounter = 1;
+    uint256 public s_itemCounter = 1;
 
-    uint256 public packPrice;
-    address private owner;
+    uint256 public s_packPrice;
+    address private s_owner;
 
     // VRF
     VRFCoordinatorV2Interface COORDINATOR;
@@ -67,7 +67,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     // OWNER MODIFIER
     modifier onlyOwner() {
         require(
-            msg.sender == owner,
+            msg.sender == s_owner,
             "The address doesnt have permission to call this function"
         );
         _;
@@ -94,17 +94,17 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         VRFConsumerBaseV2(vrfCoordinator)
     {
         COORDINATOR = VRFCoordinatorV2Interface(vrfCoordinator);
-        owner = msg.sender;
+        s_owner = msg.sender;
         s_subscriptionId = subscriptionId;
         s_keyHash = keyHash;
         s_callbackGasLimit = callbackGasLimit;
-        packPrice = _packPrice;
+        s_packPrice = _packPrice;
     }
 
     // DOES THE ITEM EXIST
     function doesItemExist(string memory itemName) public view returns (bool) {
         bool result = false;
-        for (uint256 i = 0; i < itemCounter; i++) {
+        for (uint256 i = 0; i < s_itemCounter; i++) {
             if (
                 keccak256(bytes(ItemDescriptions[i + 1].name)) ==
                 keccak256(bytes(itemName))
@@ -123,12 +123,12 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         uint256 itemSupply
     ) public onlyOwner {
         require(doesItemExist(newName) == false, "This item already exists");
-        require(itemSupply = 0, "Item must have item Supply")
-        ItemDescriptions[itemCounter] = ItemDescription(newName, itemSupply);
-        ItemTypes[_type].push(itemCounter);
-        itemCounter++;
+        require(itemSupply > 0, "Item must have item Supply");
+        ItemDescriptions[s_itemCounter] = ItemDescription(newName, itemSupply);
+        ItemTypes[_type].push(s_itemCounter);
+        s_itemCounter++;
 
-        emit itemAdded(_type, itemCounter, newName);
+        emit itemAdded(_type, s_itemCounter, newName);
     }
 
     // ADD SUPPLY OF THE ITEM(y/n)
@@ -136,7 +136,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         uint256 itemId,
         uint256 additionalSupply
     ) public onlyOwner {
-        require(itemSupply = 0, "Item must have item Supply")
+        require(additionalSupply > 0, "Item must have item Supply");
         ItemDescriptions[itemId].itemSupply += additionalSupply;
     }
 
@@ -149,14 +149,14 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         );
         if (
             balanceOf(_address, 0) <
-            (packPrice * (100 - Discounts[_address])) / 100
+            (s_packPrice * (100 - Discounts[_address])) / 100
         ) {
             revert AvatarItems_insufficientBalance();
         }
         super._burn(
             _address,
             0,
-            (packPrice * (100 - Discounts[_address])) / 100 // To calculate discounts
+            (s_packPrice * (100 - Discounts[_address])) / 100 // To calculate discounts
         );
         uint256 requestId = COORDINATOR.requestRandomWords(
             s_keyHash,
@@ -247,8 +247,8 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     // If we want to give certain players discount we can do mappings of price for each player
     // Could include upkeep(time) if we want to
     function setPackPrice(uint256 newPrice) external onlyOwner {
-        require(newPrice > 0, "Pack price can't be 0")
-        packPrice = newPrice;
+        require(newPrice > 0, "Pack price can't be 0");
+        s_packPrice = newPrice;
     }
 
     // AUTHORIZES THE CONTRACT TO CALL OUR FUNCTIONS
