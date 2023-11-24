@@ -31,11 +31,11 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
 
     // VRF
     VRFCoordinatorV2Interface COORDINATOR;
-    uint64 s_subscriptionId;
-    bytes32 s_keyHash;
-    uint32 s_callbackGasLimit;
-    uint16 constant s_requestConfirmations = 3;
-    uint32 constant s_numWords = 2;
+    uint64 private immutable s_subscriptionId;
+    bytes32 private immutable s_keyHash;
+    uint32 private immutable s_callbackGasLimit;
+    uint16 constant s_requestConfirmations = 2;
+    uint32 constant s_numWords = 7;
 
     // ITEMTYPE for targeting body part
     enum ItemType {
@@ -88,7 +88,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         address vrfCoordinator,
         bytes32 keyHash,
         uint32 callbackGasLimit,
-        uint256 _packPrice
+        uint256 packPrice
     )
         ERC1155("https://ipfs.io/ipfs/HASH_HERE/{id}.json")
         VRFConsumerBaseV2(vrfCoordinator)
@@ -98,7 +98,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         s_subscriptionId = subscriptionId;
         s_keyHash = keyHash;
         s_callbackGasLimit = callbackGasLimit;
-        s_packPrice = _packPrice;
+        s_packPrice = packPrice;
     }
 
     // DOES THE ITEM EXIST
@@ -142,7 +142,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
 
     // CALL THIS FUNCTION TO BUY PACKS WITH REWARDCOINS
     // To reduce the cost of calling vrf each pack, we could buy multiple at once
-    function buyPack(address _address) external {
+    function buyPack(address _address) external returns (uint256 requestId) {
         require(
             waitingForResponse[_address] == false,
             "The address is waiting for response"
@@ -158,7 +158,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
             0,
             (s_packPrice * (100 - Discounts[_address])) / 100 // To calculate discounts
         );
-        uint256 requestId = COORDINATOR.requestRandomWords(
+        requestId = COORDINATOR.requestRandomWords(
             s_keyHash,
             s_subscriptionId,
             s_requestConfirmations,
@@ -169,6 +169,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         waitingForResponse[_address] = true;
 
         emit packBought(_address, requestId);
+        return requestId;
     }
 
     // GET THE RANDOM NUMBER BACK
@@ -282,8 +283,4 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     ) public view returns (ItemDescription memory) {
         return ItemDescriptions[itemId];
     }
-
-    //GET A RANDOM POWER UP
-    // Could be called if the user reaches a certain milestone, could also make it a pack
-    function getPowerUp() external isAuthorized {}
 }

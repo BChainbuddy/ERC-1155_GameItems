@@ -1,7 +1,6 @@
 {
   "name": "hardhat-project",
   "devDependencies": {
-    "@chainlink/contracts": "^0.8.0",
     "@nomicfoundation/hardhat-chai-matchers": "1",
     "@nomicfoundation/hardhat-ethers": "^3.0.2",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.9",
@@ -26,5 +25,8 @@
     "solidity-coverage": "^0.8.5",
     "ts-node": ">=8.0.0",
     "typechain": "^8.3.1"
+  },
+  "dependencies": {
+    "@chainlink/contracts": "^0.8.0"
   }
 }
