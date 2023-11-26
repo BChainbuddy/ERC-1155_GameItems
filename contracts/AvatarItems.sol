@@ -242,8 +242,8 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         address _address,
         uint256 amount
     ) external isAuthorized {
-        super._mint(_address, 0, amount, "");
-        emit earnedReward(_address, amount);
+        super._mint(_address, 0, amount * timeLock(_address), "");
+        emit earnedReward(_address, amount * timeLock(_address));
     }
 
     // CHANGE PACK PRICE, if random events occur to give our players discounts
@@ -284,5 +284,54 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         uint256 itemId
     ) public view returns (ItemDescription memory) {
         return ItemDescriptions[itemId];
+    }
+
+    ///////////////////////////////////////////////////////////////////
+    // ALL POWERUPS
+    mapping(uint256 => powerUp) public powerUps;
+
+    struct powerUp {
+        string name;
+        uint256 multiplier;
+        uint256 duration;
+    }
+
+    struct powerUpActivated {
+        uint256 timestamp;
+        uint256 duration;
+        uint256 multiplier;
+    }
+
+    // ADD POWERUP
+    function addPowerUp(
+        string memory name,
+        uint256 multiplier,
+        uint256 duration
+    ) external onlyOwner {
+        powerUps[s_itemCounter] = powerUp(name, multiplier, duration);
+        s_itemCounter++;
+    }
+
+    mapping(address => powerUpActivated) public ActivationCheck;
+
+    function timeLock(address _address) public view returns (uint256) {
+        if (
+            block.timestamp >
+            ActivationCheck[_address].timestamp +
+                ActivationCheck[_address].duration
+        ) {
+            return 1;
+        } else {
+            return ActivationCheck[_address].multiplier;
+        }
+    }
+
+    function activatePowerUp(uint256 powerupId) external {
+        super._burn(msg.sender, powerupId, 1);
+        ActivationCheck[msg.sender] = powerUpActivated(
+            block.timestamp,
+            powerUps[powerupId].duration,
+            powerUps[powerupId].multiplier
+        );
     }
 }
