@@ -34,8 +34,8 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     uint64 private immutable s_subscriptionId;
     bytes32 private immutable s_keyHash;
     uint32 private immutable s_callbackGasLimit;
-    uint16 constant s_requestConfirmations = 2;
-    uint32 constant s_numWords = 7;
+    uint16 constant s_requestConfirmations = 3;
+    uint32 constant s_numWords = 2;
 
     // ITEMTYPE for targeting body part
     enum ItemType {
@@ -142,7 +142,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
 
     // CALL THIS FUNCTION TO BUY PACKS WITH REWARDCOINS
     // To reduce the cost of calling vrf each pack, we could buy multiple at once
-    function buyPack(address _address) external returns (uint256 requestId) {
+    function buyPack(address _address) public returns (uint256 requestId) {
         require(
             waitingForResponse[_address] == false,
             "The address is waiting for response"
@@ -169,7 +169,6 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         waitingForResponse[_address] = true;
 
         emit packBought(_address, requestId);
-        return requestId;
     }
 
     // GET THE RANDOM NUMBER BACK
@@ -212,6 +211,9 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         uint256 currentItem = 0;
         uint256 itemReward;
         for (uint256 i = 0; i < ItemTypes[resulttype].length; i++) {
+            if (ItemDescriptions[ItemTypes[resulttype][i]].itemSupply == 0) {
+                continue;
+            }
             if (
                 result2 > currentItem &&
                 result2 < ItemDescriptions[ItemTypes[resulttype][i]].itemSupply

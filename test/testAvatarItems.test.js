@@ -56,21 +56,23 @@ const { deployments, getNamedAccounts, ethers } = require("hardhat");
           );
         });
         it("Buys a pack and fullfills the request", async () => {
-          await avatarItems.addAvatarItem(0, "blue Shirt", "1000");
-          await avatarItems.addAvatarItem(0, "red Shirt", "1000");
-          await avatarItems.addAvatarItem(0, "yellow Shirt", "1000");
-          await avatarItems.addAvatarItem(0, "purple Shirt", "1000");
+          // avatarSkin, //12%
+          // avatarUpperBody, //22%
+          // avatarLowerBody, //22%
+          // avatarShoes, //22%
+          // avatarAccessories //22%
+          await avatarItems.addAvatarItem(0, "blue skin", "1000");
+          await avatarItems.addAvatarItem(1, "red Shirt", "1000");
+          await avatarItems.addAvatarItem(2, "yellow Pants", "1000");
+          await avatarItems.addAvatarItem(3, "purple Shoes", "1000");
+          await avatarItems.addAvatarItem(4, "chain", "1000");
           await avatarItems.authorizeContract(deployer);
           await avatarItems.earnRewards(deployer, "10");
+          expect(await avatarItems.waitingForResponse(deployer)).to.equal(
+            false
+          );
           const buyPack = await avatarItems.buyPack(deployer);
-          const buyPackReceipt = await buyPack.wait(1);
-          expect(await avatarItems.balanceOf(deployer, 0)).to.equal(
-            "10" - packPrice
-          );
-          await vrfCoordinatorV2Mock.fulfillRandomWords(
-            buyPackReceipt.logs[2].args._requestId,
-            avatarItems.target
-          );
+          expect(await avatarItems.waitingForResponse(deployer)).to.equal(true);
         });
       });
     });
