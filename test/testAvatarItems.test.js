@@ -56,23 +56,66 @@ const { deployments, getNamedAccounts, ethers } = require("hardhat");
           );
         });
         it("Buys a pack and fullfills the request", async () => {
-          // avatarSkin, //12%
-          // avatarUpperBody, //22%
-          // avatarLowerBody, //22%
-          // avatarShoes, //22%
-          // avatarAccessories //22%
-          await avatarItems.addAvatarItem(0, "blue skin", "1000");
-          await avatarItems.addAvatarItem(1, "red Shirt", "1000");
-          await avatarItems.addAvatarItem(2, "yellow Pants", "1000");
-          await avatarItems.addAvatarItem(3, "purple Shoes", "1000");
-          await avatarItems.addAvatarItem(4, "chain", "1000");
+          await avatarItems.addAvatarItem(0, "blue skin", "1000"); // id 1
+          await avatarItems.addAvatarItem(1, "red Shirt", "1000"); // id 2
+          await avatarItems.addAvatarItem(2, "yellow Pants", "10"); // id 3
+          await avatarItems.addAvatarItem(2, "red Pants", "10"); // id 4
+          await avatarItems.addAvatarItem(2, "black Pants", "10"); // id 5
+          await avatarItems.addAvatarItem(2, "brown Pants", "10"); // id 6
+          await avatarItems.addAvatarItem(2, "paper Pants", "10"); // id 7
+
+          await avatarItems.addAvatarItem(3, "purple Shoes", "1000"); // id 6
+          await avatarItems.addAvatarItem(4, "chain", "1000"); // id 7
+          await avatarItems.addAvatarItem(5, "blue Banner", "1000"); // id 8
           await avatarItems.authorizeContract(deployer);
-          await avatarItems.earnRewards(deployer, "10");
+          await avatarItems.earnRewards(deployer, 50);
           expect(await avatarItems.waitingForResponse(deployer)).to.equal(
             false
           );
           const buyPack = await avatarItems.buyPack(deployer);
+          const buyPackReceipt = await buyPack.wait(1);
+          expect(
+            await avatarItems.getRequestAddress(
+              buyPackReceipt.logs[2].args._requestId
+            )
+          ).to.equal(deployer);
           expect(await avatarItems.waitingForResponse(deployer)).to.equal(true);
+          await vrfCoordinatorV2Mock.fulfillRandomWords(
+            buyPackReceipt.logs[2].args._requestId,
+            avatarItems.target
+          );
+          expect(await avatarItems.waitingForResponse(deployer)).to.equal(
+            false
+          );
+        });
+      });
+      describe("powerUps", function () {
+        it("Adds a powerup option", async () => {
+          await avatarItems.addPowerUp("multiplier3", 3, 600); // 600 seconds
+          expect(await avatarItems.s_itemCounter()).to.equal(2);
+        });
+        it("Mints the powerup", async () => {
+          await avatarItems.addPowerUp("multiplier3", 3, 600); // 600 seconds
+          await avatarItems.powerUpMint(deployer, 1, 1);
+          expect(await avatarItems.balanceOf(deployer, 1)).to.equal(1);
+        });
+        it("Activates the power up", async () => {
+          await avatarItems.addPowerUp("multiplier3", 3, 600); // 600 seconds
+          await avatarItems.powerUpMint(deployer, 1, 2);
+          expect(await avatarItems.timeLock(deployer)).to.equal(1);
+          await avatarItems.activatePowerUp(1);
+          await expect(avatarItems.activatePowerUp(1)).to.be.reverted;
+          expect(await avatarItems.balanceOf(deployer, 1)).to.equal(1);
+          expect(
+            (await avatarItems.ActivationCheck(deployer)).duration
+          ).to.equal(600);
+          expect(await avatarItems.timeLock(deployer)).to.equal(3);
+          await avatarItems.authorizeContract(deployer);
+          await avatarItems.earnRewards(deployer, 1);
+          expect(await avatarItems.balanceOf(deployer, 0)).to.equal(3);
+          await network.provider.send("evm_increaseTime", [600]);
+          await network.provider.send("evm_mine", []);
+          expect(await avatarItems.timeLock(deployer)).to.equal(1);
         });
       });
     });

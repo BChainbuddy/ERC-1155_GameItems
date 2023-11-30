@@ -16,6 +16,13 @@ const POLYGONSCAN_API_KEY = process.env.POLYGONSCAN_API_KEY || "";
 
 module.exports = {
   defaultNetwork: "hardhat",
+  allowUnlimitedContractSize: true,
+  settings: {
+    optimizer: {
+      enabled: true,
+      runs: 200,
+    },
+  },
   networks: {
     hardhat: {
       chainId: 31337,

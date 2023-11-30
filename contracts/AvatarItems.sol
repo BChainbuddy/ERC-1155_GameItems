@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
+// ERC1155 Token Standard - Semi-Fungible Token Standard
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+
+// Chainlink's VRF (Verifiable Random Function) integration
 import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 import "@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol";
+
+// Utility library for string manipulation
 import "@openzeppelin/contracts/utils/Strings.sol";
+
+/**
+ * @title AvatarItems: ERC1155-based Tokens for Avatar Customization
+ * @dev A contract allowing the purchase and opening of avatar customization packs with random items,
+ * powered by Chainlink's VRF for randomness.
+ */
 
 contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     // ERRORS
@@ -39,11 +50,12 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
 
     // ITEMTYPE for targeting body part
     enum ItemType {
-        avatarSkin, //12%
-        avatarUpperBody, //22%
-        avatarLowerBody, //22%
-        avatarShoes, //22%
-        avatarAccessories //22%
+        avatarSkin, //10%
+        avatarUpperBody, //20%
+        avatarLowerBody, //20%
+        avatarShoes, //18%
+        avatarAccessories, //12%
+        banner //20%
     }
 
     // DESCRIPTION OF TOKEN IDS
@@ -101,12 +113,16 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         s_packPrice = packPrice;
     }
 
-    // DOES THE ITEM EXIST
+    /**
+     * @dev Checks if an item with a given name already exists.
+     * @param itemName The name of the item to check.
+     * @return bool indicating whether the item exists or not.
+     */
     function doesItemExist(string memory itemName) public view returns (bool) {
         bool result = false;
-        for (uint256 i = 0; i < s_itemCounter; i++) {
+        for (uint256 i = 1; i <= s_itemCounter; i++) {
             if (
-                keccak256(bytes(ItemDescriptions[i + 1].name)) ==
+                keccak256(bytes(ItemDescriptions[i].name)) ==
                 keccak256(bytes(itemName))
             ) {
                 result = true;
@@ -116,7 +132,12 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         return result;
     }
 
-    // ADD NEW ITEM
+    /**
+     * @dev Adds a new avatar item to the contract.
+     * @param _type The type of the item (e.g., avatarSkin, avatarUpperBody).
+     * @param newName The name of the new item to be added.
+     * @param itemSupply The initial supply of the item.
+     */
     function addAvatarItem(
         ItemType _type,
         string memory newName,
@@ -169,6 +190,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         waitingForResponse[_address] = true;
 
         emit packBought(_address, requestId);
+        return requestId;
     }
 
     // GET THE RANDOM NUMBER BACK
@@ -186,7 +208,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         // TO GET ITEM TYPE
         uint256 currentChance = 0;
         ItemType resulttype;
-        uint8[5] memory chances = getChanceArray();
+        uint8[6] memory chances = getChanceArray();
         for (uint256 i = 0; i < chances.length; i++) {
             if (result > currentChance && result < chances[i]) {
                 resulttype = ItemType(i);
@@ -197,14 +219,14 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
 
         // GET THE ACTUAL ITEM ID
         // First the supply of all items of the resulted item type is sumed up.
-        uint256 totalItemTypeSupply = 0;
+        uint256 totalItemTypeSupply;
         for (uint256 i = 0; i < ItemTypes[resulttype].length; i++) {
             totalItemTypeSupply += ItemDescriptions[ItemTypes[resulttype][i]]
                 .itemSupply; // GET ITEM SUPPLY OF EACH ELEMENT THAT IS NESTED IN CERTAIN ITEM TYPE
         }
 
         // Getting the random words from VRF and dividing it by total item supply
-        uint256 result2 = ((randomWords[0] % totalItemTypeSupply) + 1);
+        uint256 result2 = ((randomWords[1] % totalItemTypeSupply) + 1);
 
         // We loop through an array of item of a certain item type to get the winning item.
         // The same as for the item type but the chance array is not provided, because it is all variable based on the token supply
@@ -213,15 +235,17 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         for (uint256 i = 0; i < ItemTypes[resulttype].length; i++) {
             if (ItemDescriptions[ItemTypes[resulttype][i]].itemSupply == 0) {
                 continue;
-            }
-            if (
+            } else if (
                 result2 > currentItem &&
-                result2 < ItemDescriptions[ItemTypes[resulttype][i]].itemSupply
+                result2 <=
+                ItemDescriptions[ItemTypes[resulttype][i]].itemSupply +
+                    currentItem
             ) {
                 itemReward = ItemTypes[resulttype][i];
                 break;
             }
-            currentItem = ItemDescriptions[ItemTypes[resulttype][i]].itemSupply;
+            currentItem += ItemDescriptions[ItemTypes[resulttype][i]]
+                .itemSupply;
         }
 
         // MINT THE ITEM ID
@@ -232,8 +256,8 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     }
 
     // CHANCE FOR DIFFERENT ITEM TYPES
-    function getChanceArray() public pure returns (uint8[5] memory) {
-        return [12, 34, 56, 78, 100];
+    function getChanceArray() public pure returns (uint8[6] memory) {
+        return [10, 30, 50, 68, 80, 100];
     }
 
     // CALL THIS FUNCTION TO MINT NEW TOKENS
@@ -290,12 +314,14 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     // ALL POWERUPS
     mapping(uint256 => powerUp) public powerUps;
 
+    // struct for Power Up
     struct powerUp {
         string name;
         uint256 multiplier;
         uint256 duration;
     }
 
+    // struct for Activated Power Up, so we can calculate the duration and timestamp, for gas efficiency can change it into uint256
     struct powerUpActivated {
         uint256 timestamp;
         uint256 duration;
@@ -312,8 +338,10 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         s_itemCounter++;
     }
 
+    // MAPPING FOR CURRENT POWERUP
     mapping(address => powerUpActivated) public ActivationCheck;
 
+    // TIMELOCK, CALCULATES IF THE POWER UP IS STILL ON
     function timeLock(address _address) public view returns (uint256) {
         if (
             block.timestamp >
@@ -326,12 +354,30 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         }
     }
 
+    // ACTIVATES THE POWER UP AND BURNS IT
     function activatePowerUp(uint256 powerupId) external {
+        require(timeLock(msg.sender) == 1, "The last powerup is still on!");
         super._burn(msg.sender, powerupId, 1);
         ActivationCheck[msg.sender] = powerUpActivated(
             block.timestamp,
             powerUps[powerupId].duration,
             powerUps[powerupId].multiplier
         );
+    }
+
+    event powerUpMinted(address indexed _address, uint256 powerUpId);
+
+    // MINT A POWERUP
+    function powerUpMint(
+        address _address,
+        uint256 powerUpId,
+        uint256 amount
+    ) external {
+        require(
+            powerUps[powerUpId].duration > 0,
+            "This powerUp is not available"
+        );
+        super._mint(_address, powerUpId, amount, "");
+        emit powerUpMinted(_address, powerUpId);
     }
 }
