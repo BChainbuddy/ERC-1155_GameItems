@@ -420,7 +420,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         address _address,
         uint256 powerUpId,
         uint256 amount
-    ) external {
+    ) external isAuthorized {
         require(
             powerUps[powerUpId].duration > 0,
             "This powerUp is not available"
