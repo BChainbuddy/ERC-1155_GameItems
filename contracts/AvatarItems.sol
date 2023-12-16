@@ -37,15 +37,15 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     uint256 public s_itemCounter = 1;
 
     uint256 public s_packPrice;
-    address private s_owner;
+    address private immutable s_owner;
 
     // VRF
     VRFCoordinatorV2Interface COORDINATOR;
     uint64 private immutable s_subscriptionId;
     bytes32 private immutable s_keyHash;
     uint32 private immutable s_callbackGasLimit;
-    uint16 constant s_requestConfirmations = 3;
-    uint32 constant s_numWords = 2;
+    uint16 private constant s_requestConfirmations = 3;
+    uint32 private constant s_numWords = 2;
 
     // ITEMTYPE for targeting body part
     enum ItemType {
@@ -147,7 +147,6 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         ItemDescriptions[s_itemCounter] = ItemDescription(newName, itemSupply);
         ItemTypes[_type].push(s_itemCounter);
         s_itemCounter++;
-
         emit itemAdded(_type, s_itemCounter, newName);
     }
 
@@ -348,7 +347,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     mapping(uint256 => powerUp) public powerUps;
 
     // MAPPING FOR CURRENT POWERUP
-    mapping(address => powerUpActivated) public ActivationCheck;
+    mapping(address => powerUpActivated) internal ActivationCheck;
 
     // struct for Power Up
     struct powerUp {
