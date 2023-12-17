@@ -19,6 +19,10 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     // ERRORS
     error AvatarItems_insufficientBalance();
+    error AvatarItems_AddressNotAllowed();
+    error AvatarItems_ItemInputIncorrect();
+
+    error AvatarItems_PowerUpNotAvailable();
 
     // EVENTS
     event packBought(address indexed _address, uint256 _requestId);
@@ -35,7 +39,6 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
 
     // ITEMS
     uint256 public s_itemCounter = 1;
-
     uint256 public s_packPrice;
     address private immutable s_owner;
 
@@ -77,19 +80,17 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
 
     // OWNER MODIFIER
     modifier onlyOwner() {
-        require(
-            msg.sender == s_owner,
-            "The address doesnt have permission to call this function"
-        );
+        if (msg.sender != s_owner) {
+            revert AvatarItems_AddressNotAllowed();
+        }
         _;
     }
 
     // CONTRACT AUTHORIZATION MODIFIER TO CHECK IF THE EXTERNAL CONTRACTS CAN CALL OUR FUNCTION
     modifier isAuthorized() {
-        require(
-            AuthorizedContracts[msg.sender] == true,
-            "The address is not part of authorized contracts"
-        );
+        if (AuthorizedContracts[msg.sender] == false) {
+            revert AvatarItems_AddressNotAllowed();
+        }
         _;
     }
 
@@ -142,8 +143,11 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         string memory newName,
         uint256 itemSupply
     ) public onlyOwner {
-        require(doesItemExist(newName) == false, "This item already exists");
-        require(itemSupply > 0, "Item must have item Supply");
+        // require(doesItemExist(newName) == false, "This item already exists");
+        // require(itemSupply > 0, "Item must have item Supply");
+        if (doesItemExist(newName) == true || itemSupply == 0) {
+            revert AvatarItems_ItemInputIncorrect();
+        }
         ItemDescriptions[s_itemCounter] = ItemDescription(newName, itemSupply);
         ItemTypes[_type].push(s_itemCounter);
         s_itemCounter++;
@@ -159,7 +163,10 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         uint256 itemId,
         uint256 additionalSupply
     ) public onlyOwner {
-        require(additionalSupply > 0, "Item must have item Supply");
+        // require(additionalSupply > 0, "Item must have item Supply");
+        if (additionalSupply == 0) {
+            revert AvatarItems_ItemInputIncorrect();
+        }
         ItemDescriptions[itemId].itemSupply += additionalSupply;
     }
 
@@ -199,7 +206,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
     }
 
     // GET THE RANDOM NUMBER BACK
-    mapping(uint256 => address) public getRequestAddress;
+    mapping(uint256 => address) internal getRequestAddress;
     mapping(address => bool) public waitingForResponse;
 
     /**
@@ -268,7 +275,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
      * @dev Retrieves the chance array for different item types.
      * @return uint8 array representing the chances for different item types.
      */
-    function getChanceArray() public pure returns (uint8[6] memory) {
+    function getChanceArray() internal pure returns (uint8[6] memory) {
         return [10, 30, 50, 68, 80, 100];
     }
 
@@ -290,7 +297,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
      * @param newPrice The new price set for the avatar item packs.
      */
     function setPackPrice(uint256 newPrice) external onlyOwner {
-        require(newPrice > 0, "Pack price can't be 0");
+        require(newPrice > 0);
         s_packPrice = newPrice;
     }
 
@@ -335,7 +342,7 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
      */
     function viewItemDescription(
         uint256 itemId
-    ) public view returns (ItemDescription memory) {
+    ) external view returns (ItemDescription memory) {
         return ItemDescriptions[itemId];
     }
 
@@ -420,10 +427,9 @@ contract AvatarItems is ERC1155, VRFConsumerBaseV2 {
         uint256 powerUpId,
         uint256 amount
     ) external isAuthorized {
-        require(
-            powerUps[powerUpId].duration > 0,
-            "This powerUp is not available"
-        );
+        if (powerUps[powerUpId].duration == 0) {
+            revert AvatarItems_PowerUpNotAvailable();
+        }
         super._mint(_address, powerUpId, amount, "");
         emit powerUpMinted(_address, powerUpId);
     }

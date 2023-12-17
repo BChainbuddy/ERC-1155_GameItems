@@ -74,11 +74,11 @@ const { deployments, getNamedAccounts, ethers } = require("hardhat");
           );
           const buyPack = await avatarItems.buyPack(deployer);
           const buyPackReceipt = await buyPack.wait(1);
-          expect(
-            await avatarItems.getRequestAddress(
-              buyPackReceipt.logs[2].args._requestId
-            )
-          ).to.equal(deployer);
+          // expect(
+          //   await avatarItems.getRequestAddress(
+          //     buyPackReceipt.logs[2].args._requestId
+          //   )
+          // ).to.equal(deployer);
           expect(await avatarItems.waitingForResponse(deployer)).to.equal(true);
           await vrfCoordinatorV2Mock.fulfillRandomWords(
             buyPackReceipt.logs[2].args._requestId,
